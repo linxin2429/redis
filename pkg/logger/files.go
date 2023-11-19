@@ -17,13 +17,18 @@ func checkPermission(src string) bool {
 }
 
 func mkDir(src string) error {
-	return os.MkdirAll(src, os.ModePerm)
+	if err := os.MkdirAll(src, os.ModePerm); err != nil {
+		return fmt.Errorf("fail to mkDir: %w", err)
+	}
+
+	return nil
 }
 
 func isNotExistMkDir(src string) error {
 	if checkNotExist(src) {
 		return mkDir(src)
 	}
+
 	return nil
 }
 

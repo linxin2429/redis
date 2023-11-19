@@ -15,7 +15,7 @@ import (
 
 type Config struct {
 	Address string        `yaml:"address"`
-	MaxConn uint32        `yaml:"max_connect"`
+	MaxConn uint32        `yaml:"maxConnect"`
 	Timeout time.Duration `yaml:"timeout"`
 }
 
@@ -23,7 +23,7 @@ var ClientCounter int
 
 func ListenAndServeWithSignal(cfg *Config, handler tcp.Handler) error {
 	closeChan := make(chan struct{})
-	sigCh := make(chan os.Signal)
+	sigCh := make(chan os.Signal, 1)
 
 	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
 
@@ -37,7 +37,7 @@ func ListenAndServeWithSignal(cfg *Config, handler tcp.Handler) error {
 
 	listener, err := net.Listen("tcp", cfg.Address)
 	if err != nil {
-		return err
+		return fmt.Errorf("listen err: %w", err)
 	}
 
 	logger.Info(fmt.Sprintf("tcp server start at %s", cfg.Address))
@@ -49,6 +49,7 @@ func ListenAndServeWithSignal(cfg *Config, handler tcp.Handler) error {
 func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan struct{}) {
 	errCh := make(chan error, 1)
 	defer close(errCh)
+
 	go func() {
 		select {
 		case <-closeChan:
@@ -57,11 +58,13 @@ func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 			logger.Info(fmt.Sprintf("accept error: %s", er.Error()))
 		}
 		logger.Info("shutting down")
+
 		_ = listener.Close()
 		_ = handler.Close()
 	}()
 
 	ctx := context.Background()
+
 	var waitGroup sync.WaitGroup
 
 	for {
@@ -70,22 +73,27 @@ func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 			if ne, ok := err.(net.Error); ok && ne.Timeout() {
 				logger.Infof("accept occurs temporary error: %v, retry in 5 ms", err)
 				time.Sleep(5 * time.Millisecond)
+
 				continue
 			}
 			errCh <- err
+
 			break
 		}
 
 		logger.Info("accept link")
 		waitGroup.Add(1)
 		ClientCounter++
+
 		go func() {
 			defer func() {
 				waitGroup.Done()
 				ClientCounter--
 			}()
+
 			handler.Handle(ctx, conn)
 		}()
 	}
+
 	waitGroup.Wait()
 }

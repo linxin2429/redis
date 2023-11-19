@@ -16,7 +16,7 @@ type Config struct {
 	Path       string `yaml:"path"`
 	Name       string `yaml:"name"`
 	Ext        string `yaml:"ext"`
-	TimeFormat string `yaml:"time_format"`
+	TimeFormat string `yaml:"timeFormat"`
 }
 
 type logLevel int
@@ -66,15 +66,17 @@ func NewStdoutLogger() *Logger {
 	}
 	go func() {
 		for e := range logger.entryChan {
-			logger.logger.Output(0, e.msg)
+			_ = logger.logger.Output(0, e.msg)
 			logger.entryPool.Put(e)
 		}
 	}()
+
 	return logger
 }
 
 func NewFileLogger(config *Config) (*Logger, error) {
 	fileName := fmt.Sprintf("%s-%s.%s", config.Name, time.Now().Format(config.TimeFormat), config.Ext)
+
 	logFile, err := mustOpen(fileName, config.Path)
 	if err != nil {
 		return nil, fmt.Errorf("logging.Join: %v", err)
@@ -100,9 +102,12 @@ func NewFileLogger(config *Config) (*Logger, error) {
 				if err != nil {
 					panic("open log " + logFilename + " failed" + err.Error())
 				}
+
 				logger.logFile = logFile
+
 				logger.logger = log.New(io.MultiWriter(os.Stdout, logFile), "", flags)
 			}
+
 			_ = logger.logger.Output(0, e.msg)
 			logger.entryPool.Put(e)
 		}
@@ -116,18 +121,25 @@ func Setup(config *Config) {
 	if err != nil {
 		panic(err)
 	}
+
 	DefaultLogger = logger
 }
 
 func (logger *Logger) Output(level logLevel, callerDepth int, msg string) {
 	var formattedMsg string
+
 	_, file, line, ok := runtime.Caller(callerDepth)
 	if ok {
 		formattedMsg = fmt.Sprintf("[%s][%s:%d] %s", levelFlags[level], filepath.Base(file), line, msg)
 	} else {
 		formattedMsg = fmt.Sprintf("[%s] %s", levelFlags[level], msg)
 	}
-	entry := logger.entryPool.Get().(*logEntry)
+
+	entry, ok := logger.entryPool.Get().(*logEntry)
+	if !ok {
+		entry = &logEntry{}
+	}
+
 	entry.msg = formattedMsg
 	entry.level = level
 	logger.entryChan <- entry
@@ -164,7 +176,6 @@ func Warnf(format string, v ...interface{}) {
 }
 
 func Error(v ...interface{}) {
-
 	msg := fmt.Sprintln(v...)
 	DefaultLogger.Output(ERROR, defaultCallerDepth, msg)
 }

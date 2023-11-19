@@ -11,7 +11,7 @@ func (b *Boolean) Get() bool {
 func (b *Boolean) Set(value bool) {
 	if value {
 		atomic.StoreUint32((*uint32)(b), 1)
-	}else{
+	} else {
 		atomic.StoreUint32((*uint32)(b), 0)
 	}
 }

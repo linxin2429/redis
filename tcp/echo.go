@@ -29,10 +29,11 @@ type EchoClient struct {
 func (c *EchoClient) Close() error {
 	c.Waiting.WaitWithTimeout(10 * time.Second)
 	c.Conn.Close()
+
 	return nil
 }
 
-func (h *EchoHandler) Handle(ctx context.Context, conn net.Conn) {
+func (h *EchoHandler) Handle(_ context.Context, conn net.Conn) {
 	if h.closing.Get() {
 		conn.Close()
 		return
@@ -45,6 +46,7 @@ func (h *EchoHandler) Handle(ctx context.Context, conn net.Conn) {
 	h.activeConn.Store(client, conn)
 
 	reader := bufio.NewReader(conn)
+
 	for {
 		msg, err := reader.ReadString('\n')
 		if err != nil {
@@ -54,11 +56,15 @@ func (h *EchoHandler) Handle(ctx context.Context, conn net.Conn) {
 			} else {
 				logger.Warn(err)
 			}
+
 			return
 		}
+
 		client.Waiting.Add(1)
+
 		b := []byte(msg)
 		_, _ = conn.Write(b)
+
 		client.Waiting.Done()
 	}
 }
@@ -67,9 +73,15 @@ func (h *EchoHandler) Close() error {
 	logger.Info("handler shutting down")
 	h.closing.Set(true)
 	h.activeConn.Range(func(key, value any) bool {
-		client := key.(*EchoClient)
+		client, ok := key.(*EchoClient)
+		if !ok {
+			return false
+		}
+
 		client.Close()
+
 		return true
 	})
+
 	return nil
 }
